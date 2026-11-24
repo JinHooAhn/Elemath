@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>초등학생 놀이터 게임</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⭐</text></svg>">
+<style>
+:root{
+  --bg:#fff6dd; --card:#ffffff; --ink:#2b2a4c; --muted:#6b6a8a; --line:#e6dcc0;
+  --hover:#fff0c2; --accent:#5b5bd6;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    color-scheme:dark;
+    --bg:#1d1b33; --card:#2a2850; --ink:#fff4d6; --muted:#b5b2d8; --line:#46437a;
+    --hover:#34316a; --accent:#9d9dff;
+  }
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Jua","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+  min-height:100vh; padding:20px 16px 40px;
+}
+.wrap{max-width:640px; margin:0 auto}
+h1{font-size:1.9rem; text-align:center; margin:12px 0 4px}
+.sub{text-align:center; color:var(--muted); margin:0 0 24px; font-size:1.1rem}
+.list{display:grid; gap:14px}
+.game{
+  display:flex; align-items:center; gap:16px; text-decoration:none; color:inherit;
+  background:var(--card); border:3px solid var(--line); border-radius:22px; padding:16px 18px;
+}
+.game:hover{background:var(--hover)}
+.game:focus-visible{outline:4px solid var(--accent); outline-offset:2px}
+.icon{font-size:2.8rem; line-height:1; flex:none}
+.title{font-size:1.35rem; margin:0 0 4px}
+.desc{margin:0; color:var(--muted); font-size:1rem}
+.empty{text-align:center; color:var(--muted); margin-top:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⭐ 놀이터 게임 ⭐</h1>
+  <p class="sub">하고 싶은 게임을 눌러 보세요!</p>
+  <div class="list" id="list"></div>
+  <p class="empty">새로운 게임이 계속 늘어날 거예요.</p>
+</div>
+<script>
+// 새 게임을 만들면 아래 목록에 한 줄만 추가하면 돼요.
+// file: 게임 파일 이름 (index.html과 같은 곳에 올려요)
+var GAMES=[
+  {file:"shape-game.html", icon:"🔺", title:"도형이 몇 개일까요?", desc:"그림 속 도형을 세어 보고 알맞은 숫자를 골라요."}
+];
+
+var list=document.getElementById("list");
+GAMES.forEach(function(g){
+  var a=document.createElement("a");
+  a.className="game";
+  a.href=g.file;
+
+  var icon=document.createElement("div");
+  icon.className="icon";
+  icon.textContent=g.icon;
+
+  var box=document.createElement("div");
+  var t=document.createElement("p");
+  t.className="title";
+  t.textContent=g.title;
+  var d=document.createElement("p");
+  d.className="desc";
+  d.textContent=g.desc;
+  box.appendChild(t);
+  box.appendChild(d);
+
+  a.appendChild(icon);
+  a.appendChild(box);
+  list.appendChild(a);
+});
+</script>
+</body>
+</html>

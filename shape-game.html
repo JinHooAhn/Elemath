@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>도형 몇 개일까?</title>
+<style>
+:root{
+  --bg:#fff6dd; --card:#ffffff; --ink:#2b2a4c; --muted:#6b6a8a; --line:#e6dcc0;
+  --btn:#ffffff; --btn-hover:#fff0c2; --ok:#2e9e5b; --no:#e5484d; --accent:#5b5bd6;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#1d1b33; --card:#2a2850; --ink:#fff4d6; --muted:#b5b2d8; --line:#46437a;
+    --btn:#34316a; --btn-hover:#45418a; --ok:#58d68d; --no:#ff7a7f; --accent:#9d9dff;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#1d1b33; --card:#2a2850; --ink:#fff4d6; --muted:#b5b2d8; --line:#46437a;
+  --btn:#34316a; --btn-hover:#45418a; --ok:#58d68d; --no:#ff7a7f; --accent:#9d9dff;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Jua","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+  min-height:100vh; display:flex; justify-content:center; padding:16px;
+}
+.wrap{width:100%; max-width:560px}
+.back{display:inline-block; color:var(--muted); text-decoration:none; font-size:1rem; padding:6px 2px}
+.back:hover{color:var(--ink)}
+h1{font-size:1.7rem; margin:4px 0 12px; text-align:center}
+.bar{display:flex; justify-content:space-between; font-size:1.1rem; margin-bottom:10px}
+.bar span{background:var(--card); border:2px solid var(--line); border-radius:999px; padding:6px 14px}
+.board{background:var(--card); border:3px solid var(--line); border-radius:24px; padding:10px}
+svg{display:block; width:100%; height:auto}
+.q{text-align:center; font-size:1.35rem; margin:14px 0 10px}
+.choices{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+.choices button{
+  font:inherit; font-size:2rem; padding:18px 4px; border-radius:18px;
+  background:var(--btn); color:var(--ink); border:3px solid var(--line); cursor:pointer;
+  min-height:84px;
+}
+.choices button:hover:not(:disabled){background:var(--btn-hover)}
+.choices button:focus-visible,.next:focus-visible{outline:4px solid var(--accent); outline-offset:2px}
+.choices button.ok{background:var(--ok); border-color:var(--ok); color:#fff}
+.choices button.no{background:var(--no); border-color:var(--no); color:#fff}
+.choices button:disabled{cursor:default}
+.msg{min-height:3.2em; text-align:center; font-size:1.2rem; margin:12px 0 4px}
+.next{
+  display:none; margin:0 auto; font:inherit; font-size:1.3rem; padding:12px 32px;
+  border-radius:999px; border:none; background:var(--accent); color:#fff; cursor:pointer;
+}
+.next.show{display:block}
+.pop{animation:pop .35s ease}
+@keyframes pop{0%{transform:scale(.6)}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.pop{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← 게임 목록</a>
+  <h1>⭐ 도형이 몇 개일까요? ⭐</h1>
+  <div class="bar"><span id="score">점수 0</span><span id="round">1번째 문제</span></div>
+  <div class="board"><svg id="art" viewBox="0 0 400 260" role="img" aria-label="도형 그림"></svg></div>
+  <div class="q" id="question"></div>
+  <div class="choices" id="choices"></div>
+  <div class="msg" id="msg" aria-live="polite"></div>
+  <button class="next" id="next">다시 하기</button>
+</div>
+<script>
+(function(){
+  var COLORS=[{n:"빨간",c:"#e5484d"},{n:"파란",c:"#3b82f6"},{n:"노란",c:"#f5b800"},{n:"초록",c:"#2fa84f"},{n:"보라",c:"#8e4ec6"},{n:"주황",c:"#f76b15"}];
+  var SHAPES=[{n:"동그라미",k:"circle",p:"는"},{n:"세모",k:"tri",p:"는"},{n:"네모",k:"sq",p:"는"},{n:"별",k:"star",p:"은"}];
+  var NATIVE=["","하나","둘","셋","넷","다섯","여섯","일곱","여덟","아홉"];
+  var SINO=["","일","이","삼","사","오","육","칠","팔","구"];
+  var NS="http://www.w3.org/2000/svg";
+  var TOTAL=10, score=0, round=1, answer=0, locked=false, missed=false;
+
+  function rnd(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+  function pick(a){return a[rnd(0,a.length-1)]}
+  function shuffle(a){for(var i=a.length-1;i>0;i--){var j=rnd(0,i),t=a[i];a[i]=a[j];a[j]=t}return a}
+
+  function starPoints(cx,cy,R,r){
+    var p=[];
+    for(var i=0;i<10;i++){
+      var ang=-Math.PI/2+i*Math.PI/5, rad=i%2?r:R;
+      p.push((cx+rad*Math.cos(ang)).toFixed(1)+","+(cy+rad*Math.sin(ang)).toFixed(1));
+    }
+    return p.join(" ");
+  }
+  function make(kind,x,y,s,color){
+    var el;
+    if(kind==="circle"){el=document.createElementNS(NS,"circle");el.setAttribute("cx",x);el.setAttribute("cy",y);el.setAttribute("r",s/2)}
+    else if(kind==="sq"){el=document.createElementNS(NS,"rect");el.setAttribute("x",x-s/2);el.setAttribute("y",y-s/2);el.setAttribute("width",s);el.setAttribute("height",s);el.setAttribute("rx",6)}
+    else if(kind==="tri"){el=document.createElementNS(NS,"polygon");el.setAttribute("points",x+","+(y-s/2)+" "+(x+s/2)+","+(y+s/2)+" "+(x-s/2)+","+(y+s/2))}
+    else {el=document.createElementNS(NS,"polygon");el.setAttribute("points",starPoints(x,y,s/2+4,s/4.2))}
+    el.setAttribute("fill",color);
+    el.setAttribute("stroke","rgba(0,0,0,.25)");
+    el.setAttribute("stroke-width","3");
+    el.setAttribute("stroke-linejoin","round");
+    return el;
+  }
+
+  // 겹치지 않게 위치 고르기
+  function positions(n){
+    var pts=[], tries=0, size=46;
+    while(pts.length<n && tries<3000){
+      tries++;
+      var x=rnd(40,360), y=rnd(40,220), ok=true;
+      for(var i=0;i<pts.length;i++){
+        var dx=pts[i].x-x, dy=pts[i].y-y;
+        if(dx*dx+dy*dy<(size+14)*(size+14)){ok=false;break}
+      }
+      if(ok)pts.push({x:x,y:y});
+    }
+    return pts;
+  }
+
+  function newQuestion(){
+    locked=false;
+    document.getElementById("msg").textContent="";
+    document.getElementById("next").classList.remove("show");
+    document.getElementById("round").textContent=round+" / "+TOTAL+" 문제";
+    missed=false;
+
+    // 맞출 도형 종류와 색 정하기
+    var color=pick(COLORS), shape=pick(SHAPES);
+    answer=rnd(1,9);
+
+    var svg=document.getElementById("art");
+    svg.innerHTML="";
+    var pts=positions(answer); // 한 가지 색, 한 가지 모양만 그려요
+    if(pts.length<answer){answer=pts.length}
+
+    pts.forEach(function(p){
+      svg.appendChild(make(shape.k,p.x,p.y,44,color.c));
+    });
+
+    document.getElementById("question").innerHTML=
+      "<b style='color:"+color.c+"'>"+color.n+" "+shape.n+"</b>"+shape.p+" 모두 몇 개일까요?";
+
+    // 보기: 서로 다른 세 숫자, 서로 다른 세 가지 표기
+    var nums=[answer];
+    while(nums.length<3){
+      var n=rnd(1,9);
+      if(nums.indexOf(n)<0)nums.push(n);
+    }
+    var styles=shuffle([0,1,2]); // 0=아라비아, 1=순우리말, 2=한자어
+    var opts=nums.map(function(n,i){
+      var st=styles[i];
+      var label=st===0?String(n):st===1?NATIVE[n]:SINO[n];
+      return {n:n,label:label};
+    });
+    shuffle(opts);
+
+    var box=document.getElementById("choices");
+    box.innerHTML="";
+    opts.forEach(function(o){
+      var b=document.createElement("button");
+      b.type="button";
+      b.textContent=o.label;
+      b.addEventListener("click",function(){choose(b,o.n)});
+      box.appendChild(b);
+    });
+  }
+
+  function choose(btn,n){
+    if(locked)return;
+    var msg=document.getElementById("msg");
+    var btns=document.querySelectorAll("#choices button");
+    if(n===answer){
+      locked=true;
+      if(!missed)score++;
+      btn.classList.add("ok","pop");
+      msg.textContent="🎉 맞았어요! 정답은 "+answer+"("+NATIVE[answer]+", "+SINO[answer]+")개예요!";
+      btns.forEach(function(b){b.disabled=true});
+      document.getElementById("score").textContent="점수 "+score;
+      setTimeout(function(){
+        if(round>=TOTAL){finish()}else{round++;newQuestion()}
+      },2000);
+    }else{
+      missed=true;
+      btn.classList.add("no");
+      btn.disabled=true;
+      msg.textContent="앗, 다시 세어 볼까요? 🔍";
+    }
+  }
+
+  function finish(){
+    locked=true;
+    document.getElementById("art").innerHTML="";
+    document.getElementById("choices").innerHTML="";
+    document.getElementById("question").textContent="🎉 모두 끝났어요!";
+    document.getElementById("msg").textContent=TOTAL+"문제 중 "+score+"개를 한 번에 맞혔어요!";
+    document.getElementById("next").classList.add("show");
+  }
+
+  document.getElementById("next").addEventListener("click",function(){
+    score=0;round=1;
+    document.getElementById("score").textContent="점수 0";
+    newQuestion();
+  });
+  newQuestion();
+})();
+</script>
+</body>
+</html>
