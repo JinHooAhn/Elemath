@@ -33,6 +33,10 @@ body{
 h1{font-size:1.6rem; margin:2px 0 10px; text-align:center}
 .bar{display:flex; justify-content:space-between; gap:8px; font-size:1.05rem; margin-bottom:12px}
 .bar span{background:var(--card); border:2px solid var(--line); border-radius:999px; padding:6px 14px}
+.mute{font:inherit; font-size:1.2rem; background:var(--card); border:2px solid var(--line); border-radius:999px; padding:4px 12px; cursor:pointer; color:var(--ink)}
+.mute:focus-visible{outline:4px solid var(--accent); outline-offset:2px}
+.confetti{position:fixed; top:-40px; font-size:1.7rem; pointer-events:none; z-index:50; animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(115vh) rotate(540deg)}}
 .target{
   text-align:center; background:var(--card); border:3px solid var(--line);
   border-radius:22px; padding:10px 12px; margin-bottom:12px;
@@ -70,7 +74,7 @@ h1{font-size:1.6rem; margin:2px 0 10px; text-align:center}
 <div class="wrap">
   <a class="back" href="index.html">← 게임 목록</a>
   <h1>🧩 짝을 찾아라!</h1>
-  <div class="bar"><span id="found">찾은 짝 0 / 3</span><span id="solved">푼 문제 0개</span></div>
+  <div class="bar"><span id="found">찾은 짝 0 / 3</span><span id="solved">푼 문제 0개</span><button class="mute" id="mute" type="button" aria-label="소리 끄기">🔊</button></div>
   <div class="target"><small>목표 숫자</small><b id="target">7</b></div>
   <div class="board" id="board">
     <svg id="lines" viewBox="0 0 300 300" aria-hidden="true"></svg>
@@ -90,6 +94,57 @@ h1{font-size:1.6rem; margin:2px 0 10px; text-align:center}
   var cells=[];
   var down=null, second=null, anchor=null, tapOff=false;
 
+  // ----- 빵빠레 소리와 색종이 -----
+  var actx=null, muted=false;
+  function audio(){
+    if(!actx){
+      var C=window.AudioContext||window.webkitAudioContext;
+      if(C){try{actx=new C()}catch(err){actx=null}}
+    }
+    if(actx&&actx.state==="suspended"){actx.resume()}
+    return actx;
+  }
+  function tone(freq,start,dur,type,vol){
+    var o=actx.createOscillator(), g=actx.createGain();
+    o.type=type; o.frequency.value=freq;
+    g.gain.setValueAtTime(0.0001,start);
+    g.gain.linearRampToValueAtTime(vol,start+0.02);
+    g.gain.setValueAtTime(vol,start+Math.max(dur-0.08,0.03));
+    g.gain.linearRampToValueAtTime(0.0001,start+dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(start); o.stop(start+dur+0.03);
+  }
+  function fanfare(){
+    if(muted)return;
+    var a=audio();
+    if(!a)return;
+    var t=a.currentTime+0.05;
+    // 빠 빠 빠 빠~안 / 빠밤 빠~~아암!
+    var notes=[[523,0,.13],[523,.16,.13],[523,.32,.13],[659,.48,.42],
+               [587,.95,.13],[659,1.12,.13],[784,1.3,.9]];
+    notes.forEach(function(n){
+      tone(n[0],t+n[1],n[2],"square",0.07);
+      tone(n[0]/2,t+n[1],n[2],"triangle",0.1);
+    });
+    // 마지막 소리는 화음으로 크게
+    tone(988,t+1.3,.9,"square",0.05);
+    tone(523,t+1.3,.9,"sawtooth",0.04);
+  }
+  function confetti(){
+    if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+    var icons=["🎉","⭐","✨","🎊","🌟"];
+    for(var i=0;i<36;i++){
+      var d=document.createElement("div");
+      d.className="confetti";
+      d.textContent=icons[rnd(0,icons.length-1)];
+      d.style.left=rnd(0,96)+"vw";
+      d.style.animationDuration=(2+Math.random()*1.8).toFixed(2)+"s";
+      d.style.animationDelay=(Math.random()*.5).toFixed(2)+"s";
+      document.body.appendChild(d);
+      (function(el){setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el)},4200)})(d);
+    }
+  }
+
   function rnd(a,b){return Math.floor(Math.random()*(b-a+1))+a}
 
   function edgeList(){
@@ -107,6 +162,18 @@ h1{font-size:1.6rem; margin:2px 0 10px; text-align:center}
     return EDGES.filter(function(e){return v[e[0]]+v[e[1]]===t});
   }
 
+  // 정답 짝의 숫자 조합이 서로 달라야 해요. (예: 7 → 1+6, 2+5, 3+4)
+  function distinctCombos(v,pairs){
+    var seen={};
+    for(var k=0;k<pairs.length;k++){
+      var x=v[pairs[k][0]], y=v[pairs[k][1]];
+      var key=Math.min(x,y)+"+"+Math.max(x,y);
+      if(seen[key])return false;
+      seen[key]=true;
+    }
+    return true;
+  }
+
   // 정답 짝끼리 같은 칸을 쓰지 않는지 확인해요.
   function noOverlap(pairs){
     var used={};
@@ -117,7 +184,7 @@ h1{font-size:1.6rem; margin:2px 0 10px; text-align:center}
     return true;
   }
 
-  // 정답 짝이 정확히 3개이고 서로 겹치지 않을 때까지 숫자를 다시 뽑아요.
+  // 정답 짝이 정확히 3개이고, 칸도 숫자 조합도 겹치지 않을 때까지 다시 뽑아요.
   function generate(){
     var t=TARGETS[turn%TARGETS.length]; // 7 → 8 → 9 → 7 … 순서로 돌아가요
     turn++;
@@ -125,7 +192,7 @@ h1{font-size:1.6rem; margin:2px 0 10px; text-align:center}
       var v=[];
       for(var i=0;i<9;i++)v.push(rnd(1,9));
       var ps=answerPairs(v,t);
-      if(ps.length===NEED&&noOverlap(ps))return {v:v,t:t};
+      if(ps.length===NEED&&noOverlap(ps)&&distinctCombos(v,ps))return {v:v,t:t};
     }
     return {v:[2,5,3,4,3,1,4,5,6],t:7};
   }
@@ -200,7 +267,9 @@ h1{font-size:1.6rem; margin:2px 0 10px; text-align:center}
         solved++;
         ui();
         msg.textContent="🌟 "+a.v+" + "+b.v+" = "+sum+"  짝을 모두 찾았어요! 잠시 뒤 다음 문제예요.";
-        timer=setTimeout(newPuzzle,2500);
+        fanfare();
+        confetti();
+        timer=setTimeout(newPuzzle,3500);
       }else{
         msg.textContent="🎉 "+a.v+" + "+b.v+" = "+sum+"  맞아요! 아직 "+(NEED-foundCount)+"개 남았어요.";
       }
@@ -214,6 +283,7 @@ h1{font-size:1.6rem; margin:2px 0 10px; text-align:center}
   }
 
   board.addEventListener("pointerdown",function(e){
+    audio(); // 소리는 화면을 처음 누른 뒤부터 낼 수 있어요
     if(locked)return;
     var cell=cellAt(e);
     if(!cell)return;
@@ -259,6 +329,12 @@ h1{font-size:1.6rem; margin:2px 0 10px; text-align:center}
   window.addEventListener("pointercancel",release);
 
   $("again").addEventListener("click",newPuzzle);
+  $("mute").addEventListener("click",function(){
+    muted=!muted;
+    this.textContent=muted?"🔇":"🔊";
+    this.setAttribute("aria-label",muted?"소리 켜기":"소리 끄기");
+    if(!muted)audio();
+  });
   newPuzzle();
 })();
 </script>
